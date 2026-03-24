@@ -1,0 +1,93 @@
+name: Sync upstream
+on:
+  schedule:
+    - cron: '0 4 * * *'  # 每天北京时间 12:00 检查一次
+  workflow_dispatch:  # 支持手动触发
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/anthropics/claude-plugins-official.git
+          git fetch upstream main
+
+      - name: Check for new commits
+        id: check
+        run: |
+          UPSTREAM_SHA=$(git rev-parse upstream/main)
+          # 检查上游最新 commit 是否已经在我们的 main 中
+          if git merge-base --is-ancestor $UPSTREAM_SHA HEAD; then
+            echo "has_updates=false" >> $GITHUB_OUTPUT
+            echo "No new upstream commits"
+          else
+            echo "has_updates=true" >> $GITHUB_OUTPUT
+            echo "New upstream commits detected!"
+            # 获取新增的 commit 摘要
+            CHANGES=$(git log HEAD..upstream/main --oneline | head -20)
+            echo "changes<<EOF" >> $GITHUB_OUTPUT
+            echo "$CHANGES" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create sync branch and PR
+        if: steps.check.outputs.has_updates == 'true'
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="upstream-sync-$(date +%Y%m%d)"
+          git checkout -b $BRANCH
+          git merge upstream/main --no-edit || true
+
+          # 如果有冲突，标记但不阻塞
+          if git diff --name-only --diff-filter=U | grep -q .; then
+            CONFLICT="⚠️ 有合并冲突需要手动解决"
+            git add -A
+            git commit -m "sync: merge upstream with conflicts" --no-verify || true
+          else
+            CONFLICT=""
+          fi
+
+          git push origin $BRANCH
+
+          PR_URL=$(gh pr create \
+            --title "🔄 Sync upstream $(date +%Y-%m-%d)" \
+            --body "## Upstream Changes
+
+          ${{ steps.check.outputs.changes }}
+
+          ${CONFLICT}
+
+          Auto-synced from anthropics/claude-plugins-official" \
+            --head $BRANCH \
+            --base main)
+
+          echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
+
+      - name: Notify via Telegram
+        if: steps.check.outputs.has_updates == 'true'
+        env:
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: 6629257152
+        run: |
+          PR_URL="${{ steps.pr.outputs.pr_url }}"
+          CHANGES="${{ steps.check.outputs.changes }}"
+          MESSAGE="🔔 Claude Plugins 上游有更新！
+
+          📝 变更：
+          ${CHANGES}
+
+          👉 PR: ${PR_URL}"
+
+          curl -s "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            -d "chat_id=${CHAT_ID}" \
+            --data-urlencode "text=${MESSAGE}" \
+            -d "disable_web_page_preview=true"
