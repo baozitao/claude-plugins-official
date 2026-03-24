@@ -41,7 +41,8 @@ jobs:
         if: steps.check.outputs.has_updates == 'true'
         id: pr
         env:
-          GH_TOKEN: ${{ secrets.PAT }}
+          PAT: ${{ secrets.PAT }}
+          REPO: ${{ github.repository }}
         run: |
           BRANCH="upstream-sync-$(date +%Y%m%d)"
           git checkout -b $BRANCH
@@ -63,18 +64,29 @@ jobs:
 
           git push origin $BRANCH
 
-          PR_URL=$(gh pr create \
-            --title "🔄 Sync upstream $(date +%Y-%m-%d)" \
-            --body "## Upstream Changes
+          # 使用 REST API 创建 PR（fine-grained PAT 不支持 GraphQL，但支持 REST）
+          CHANGES="${{ steps.check.outputs.changes }}"
+          PR_BODY="## Upstream Changes
 
-          ${{ steps.check.outputs.changes }}
+          ${CHANGES}
 
           ${CONFLICT}
 
-          Auto-synced from anthropics/claude-plugins-official" \
-            --head $BRANCH \
-            --base main)
+          Auto-synced from anthropics/claude-plugins-official"
 
+          PR_RESPONSE=$(curl -s -X POST \
+            -H "Authorization: token ${PAT}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${REPO}/pulls" \
+            -d "{
+              \"title\": \"🔄 Sync upstream $(date +%Y-%m-%d)\",
+              \"body\": $(echo "$PR_BODY" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))'),
+              \"head\": \"${BRANCH}\",
+              \"base\": \"main\"
+            }")
+
+          PR_URL=$(echo "$PR_RESPONSE" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("html_url","ERROR: "+str(d.get("message","unknown"))))')
+          echo "PR URL: $PR_URL"
           echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
 
       - name: Notify via Telegram
