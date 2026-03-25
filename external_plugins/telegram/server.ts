@@ -920,15 +920,21 @@ async function handleInbound(
 
   const imagePath = downloadImage ? await downloadImage() : undefined
 
-  const replyTo = ctx.message?.reply_to_message
+  // If this message is a reply, prepend the quoted message content so Claude
+  // can see what the user is referring to, and build structured meta fields.
+  const replyMsg = ctx.message?.reply_to_message
   let contentWithReply = text
-  const replyToMeta = replyTo != null ? (() => {
-    const replyText = replyTo.text ?? replyTo.caption
-    const replyUser = replyTo.from?.username ?? (replyTo.from ? String(replyTo.from.id) : undefined)
+  const replyToMeta = replyMsg != null ? (() => {
+    const replyFrom = replyMsg.from?.username ?? replyMsg.from?.first_name ?? 'unknown'
+    const replyText =
+      ('text' in replyMsg && typeof replyMsg.text === 'string' && replyMsg.text) ||
+      ('caption' in replyMsg && typeof replyMsg.caption === 'string' && replyMsg.caption) ||
+      null
     const replyPreview = replyText ? replyText.slice(0, 200) : '[media]'
-    contentWithReply = `[引用消息 #${replyTo.message_id} from @${replyUser ?? 'unknown'}: ${replyPreview}]\n${text}`
+    contentWithReply = `[引用消息 #${replyMsg.message_id} from @${replyFrom}: ${replyPreview}]\n${text}`
+    const replyUser = replyMsg.from?.username ?? (replyMsg.from ? String(replyMsg.from.id) : undefined)
     return {
-      reply_to_message_id: String(replyTo.message_id),
+      reply_to_message_id: String(replyMsg.message_id),
       ...(replyText ? { reply_to_snippet: replyText.slice(0, 100) } : {}),
       ...(replyUser ? { reply_to_user: replyUser } : {}),
     }
