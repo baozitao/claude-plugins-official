@@ -57,20 +57,20 @@ jobs:
 
             # Bump telegram plugin patch version
             cat > /tmp/bump_version.py << 'PYEOF'
-            import json, pathlib
-            pkg_path = pathlib.Path('external_plugins/telegram/package.json')
-            plugin_path = pathlib.Path('external_plugins/telegram/.claude-plugin/plugin.json')
-            pkg = json.loads(pkg_path.read_text())
-            parts = pkg['version'].split('.')
-            parts[2] = str(int(parts[2]) + 1)
-            new_ver = '.'.join(parts)
-            pkg['version'] = new_ver
-            pkg_path.write_text(json.dumps(pkg, indent=2) + '\n')
-            plugin = json.loads(plugin_path.read_text())
-            plugin['version'] = new_ver
-            plugin_path.write_text(json.dumps(plugin, indent=2) + '\n')
-            print(f'Bumped version to {new_ver}')
-            PYEOF
+import json, pathlib
+pkg_path = pathlib.Path('external_plugins/telegram/package.json')
+plugin_path = pathlib.Path('external_plugins/telegram/.claude-plugin/plugin.json')
+pkg = json.loads(pkg_path.read_text())
+parts = pkg['version'].split('.')
+parts[2] = str(int(parts[2]) + 1)
+new_ver = '.'.join(parts)
+pkg['version'] = new_ver
+pkg_path.write_text(json.dumps(pkg, indent=2) + '\n')
+plugin = json.loads(plugin_path.read_text())
+plugin['version'] = new_ver
+plugin_path.write_text(json.dumps(plugin, indent=2) + '\n')
+print(f'Bumped version to {new_ver}')
+PYEOF
             python3 /tmp/bump_version.py
             NEW_VER=$(python3 -c "import json; print(json.load(open('external_plugins/telegram/package.json'))['version'])")
             git add external_plugins/telegram/package.json external_plugins/telegram/.claude-plugin/plugin.json
