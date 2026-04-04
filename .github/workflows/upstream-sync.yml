@@ -37,21 +37,17 @@ jobs:
             echo "EOF" >> $GITHUB_OUTPUT
           fi
 
-      - name: Create sync branch and PR
+      - name: Merge upstream and push to main
         if: steps.check.outputs.has_updates == 'true'
-        id: pr
+        id: merge
         env:
           PAT: ${{ secrets.PAT }}
-          REPO: ${{ github.repository }}
         run: |
-          BRANCH="upstream-sync-$(date +%Y%m%d)"
-          git checkout -b $BRANCH
-
-          # 配置 committer identity（merge 必须）
+          # 配置 committer identity
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
 
-          CONFLICT=""
+          CONFLICT="false"
           if git merge upstream/main --no-edit; then
             echo "Merge succeeded cleanly"
 
@@ -61,57 +57,53 @@ jobs:
             NEW_VER=$(python3 -c "import json; print(json.load(open('external_plugins/telegram/package.json'))['version'])")
             git add external_plugins/telegram/package.json external_plugins/telegram/.claude-plugin/plugin.json
             git commit -m "chore: bump telegram plugin version to ${NEW_VER}"
+
+            # 直接推送到 main
+            git push origin main
+            echo "merge_status=success" >> $GITHUB_OUTPUT
+            echo "new_version=${NEW_VER}" >> $GITHUB_OUTPUT
           else
-            # 有冲突：记录并提交冲突状态
-            CONFLICT="⚠️ 有合并冲突需要手动解决"
-            echo "Merge conflicts detected, committing conflict state"
-            git add -A
-            git commit -m "sync: merge upstream with conflicts (manual resolution needed)"
+            # 有冲突：终止 merge，记录状态，不推送
+            git merge --abort
+            echo "merge_status=conflict" >> $GITHUB_OUTPUT
+            echo "Merge conflicts detected, skipping push"
           fi
 
-          git push origin $BRANCH
-
-          # 使用 REST API 创建 PR（fine-grained PAT 不支持 GraphQL，但支持 REST）
-          CHANGES="${{ steps.check.outputs.changes }}"
-          PR_BODY="## Upstream Changes
-
-          ${CHANGES}
-
-          ${CONFLICT}
-
-          Auto-synced from anthropics/claude-plugins-official"
-
-          PR_RESPONSE=$(curl -s -X POST \
-            -H "Authorization: token ${PAT}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${REPO}/pulls" \
-            -d "{
-              \"title\": \"🔄 Sync upstream $(date +%Y-%m-%d)\",
-              \"body\": $(echo "$PR_BODY" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))'),
-              \"head\": \"${BRANCH}\",
-              \"base\": \"main\"
-            }")
-
-          PR_URL=$(echo "$PR_RESPONSE" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("html_url","ERROR: "+str(d.get("message","unknown"))))')
-          echo "PR URL: $PR_URL"
-          echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
-
-      - name: Notify via Telegram
-        if: steps.check.outputs.has_updates == 'true'
+      - name: Notify via Telegram (success)
+        if: steps.check.outputs.has_updates == 'true' && steps.merge.outputs.merge_status == 'success'
         env:
           BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHAT_ID: 6629257152
         run: |
-          PR_URL="${{ steps.pr.outputs.pr_url }}"
           CHANGES="${{ steps.check.outputs.changes }}"
-          MESSAGE="🔔 Claude Plugins 上游有更新！
+          NEW_VER="${{ steps.merge.outputs.new_version }}"
+          MESSAGE="✅ Claude Plugins 上游同步完成！
 
-          📝 变更：
-          ${CHANGES}
+📝 变更：
+${CHANGES}
 
-          👉 PR: ${PR_URL}"
+🏷️ Telegram 插件已升级到 v${NEW_VER}
+🚀 已直接合并到 main 分支"
 
           curl -s "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
             -d "chat_id=${CHAT_ID}" \
-            --data-urlencode "text=${MESSAGE}" \
-            -d "disable_web_page_preview=true"
+            --data-urlencode "text=${MESSAGE}"
+
+      - name: Notify via Telegram (conflict)
+        if: steps.check.outputs.has_updates == 'true' && steps.merge.outputs.merge_status == 'conflict'
+        env:
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: 6629257152
+        run: |
+          CHANGES="${{ steps.check.outputs.changes }}"
+          MESSAGE="⚠️ Claude Plugins 上游同步失败：有合并冲突！
+
+📝 上游变更：
+${CHANGES}
+
+🔧 需要手动处理冲突后推送到 main 分支
+📂 仓库：https://github.com/${{ github.repository }}"
+
+          curl -s "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            -d "chat_id=${CHAT_ID}" \
+            --data-urlencode "text=${MESSAGE}"
