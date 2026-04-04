@@ -26,10 +26,10 @@ jobs:
           # 检查上游最新 commit 是否已经在我们的 main 中
           if git merge-base --is-ancestor $UPSTREAM_SHA HEAD; then
             echo "has_updates=false" >> $GITHUB_OUTPUT
-            echo "No new upstream commits"
+            echo "上游无新提交"
           else
             echo "has_updates=true" >> $GITHUB_OUTPUT
-            echo "New upstream commits detected!"
+            echo "检测到上游新提交！"
           fi
 
       - name: Merge upstream and push to main
@@ -46,7 +46,7 @@ jobs:
           OLD_HEAD=$(git rev-parse HEAD)
 
           if git merge upstream/main --no-edit; then
-            echo "Merge succeeded cleanly"
+            echo "合并成功"
 
             # 获取本次 sync 包含的所有上游提交日志（排除 bump 提交）
             CHANGES_RAW=$(git log ${OLD_HEAD}..HEAD --oneline | grep -v 'chore: bump' | head -20)
@@ -73,7 +73,7 @@ jobs:
             CHANGES_FORMATTED=$(echo "$CHANGES_RAW" | sed 's/^/- /')
             git merge --abort
             echo "merge_status=conflict" >> $GITHUB_OUTPUT
-            echo "Merge conflicts detected, skipping push"
+            echo "检测到合并冲突，跳过推送"
             echo "changes<<EOF" >> $GITHUB_OUTPUT
             echo "$CHANGES_FORMATTED" >> $GITHUB_OUTPUT
             echo "EOF" >> $GITHUB_OUTPUT
@@ -87,11 +87,11 @@ jobs:
         run: |
           CHANGES="${{ steps.merge.outputs.changes }}"
           NEW_VER="${{ steps.merge.outputs.new_version }}"
-          MESSAGE="✅ Upstream sync 成功
+          MESSAGE="✅ 上游同步成功
 
-版本: ${NEW_VER}
+版本：${NEW_VER}
 
-变更日志:
+变更日志：
 ${CHANGES}"
 
           curl -s "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
@@ -105,12 +105,12 @@ ${CHANGES}"
           CHAT_ID: 6629257152
         run: |
           CHANGES="${{ steps.merge.outputs.changes }}"
-          MESSAGE="⚠️ Upstream sync 失败：有合并冲突！
+          MESSAGE="⚠️ 上游同步冲突，需要手动处理
 
-上游变更日志:
+上游变更日志：
 ${CHANGES}
 
-需要手动处理冲突后推送到 main 分支
+请手动解决冲突后推送到 main 分支
 仓库：https://github.com/${{ github.repository }}"
 
           curl -s "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
