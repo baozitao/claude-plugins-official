@@ -30,11 +30,6 @@ jobs:
           else
             echo "has_updates=true" >> $GITHUB_OUTPUT
             echo "New upstream commits detected!"
-            # 获取新增的 commit 摘要
-            CHANGES=$(git log HEAD..upstream/main --oneline | head -20)
-            echo "changes<<EOF" >> $GITHUB_OUTPUT
-            echo "$CHANGES" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
           fi
 
       - name: Merge upstream and push to main
@@ -47,9 +42,16 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
 
-          CONFLICT="false"
+          # 记录 merge 前的 HEAD，用于之后获取变更日志
+          OLD_HEAD=$(git rev-parse HEAD)
+
           if git merge upstream/main --no-edit; then
             echo "Merge succeeded cleanly"
+
+            # 获取本次 sync 包含的所有上游提交日志（排除 bump 提交）
+            CHANGES_RAW=$(git log ${OLD_HEAD}..HEAD --oneline | grep -v 'chore: bump' | head -20)
+            # 每行加上 "- " 前缀
+            CHANGES_FORMATTED=$(echo "$CHANGES_RAW" | sed 's/^/- /')
 
             # Bump telegram plugin patch version
             echo 'aW1wb3J0IGpzb24sIHBhdGhsaWIKcGtnX3BhdGggPSBwYXRobGliLlBhdGgoJ2V4dGVybmFsX3BsdWdpbnMvdGVsZWdyYW0vcGFja2FnZS5qc29uJykKcGx1Z2luX3BhdGggPSBwYXRobGliLlBhdGgoJ2V4dGVybmFsX3BsdWdpbnMvdGVsZWdyYW0vLmNsYXVkZS1wbHVnaW4vcGx1Z2luLmpzb24nKQpwa2cgPSBqc29uLmxvYWRzKHBrZ19wYXRoLnJlYWRfdGV4dCgpKQpwYXJ0cyA9IHBrZ1sndmVyc2lvbiddLnNwbGl0KCcuJykKcGFydHNbMl0gPSBzdHIoaW50KHBhcnRzWzJdKSArIDEpCm5ld192ZXIgPSAnLicuam9pbihwYXJ0cykKcGtnWyd2ZXJzaW9uJ10gPSBuZXdfdmVyCnBrZ19wYXRoLndyaXRlX3RleHQoanNvbi5kdW1wcyhwa2csIGluZGVudD0yKSArICdcbicpCnBsdWdpbiA9IGpzb24ubG9hZHMocGx1Z2luX3BhdGgucmVhZF90ZXh0KCkpCnBsdWdpblsndmVyc2lvbiddID0gbmV3X3ZlcgpwbHVnaW5fcGF0aC53cml0ZV90ZXh0KGpzb24uZHVtcHMocGx1Z2luLCBpbmRlbnQ9MikgKyAnXG4nKQpwcmludChmJ0J1bXBlZCB2ZXJzaW9uIHRvIHtuZXdfdmVyfScpCg==' | base64 -d > /tmp/bump_version.py
@@ -62,11 +64,19 @@ jobs:
             git push origin main
             echo "merge_status=success" >> $GITHUB_OUTPUT
             echo "new_version=${NEW_VER}" >> $GITHUB_OUTPUT
+            echo "changes<<EOF" >> $GITHUB_OUTPUT
+            echo "$CHANGES_FORMATTED" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
           else
             # 有冲突：终止 merge，记录状态，不推送
+            CHANGES_RAW=$(git log HEAD..upstream/main --oneline | head -20)
+            CHANGES_FORMATTED=$(echo "$CHANGES_RAW" | sed 's/^/- /')
             git merge --abort
             echo "merge_status=conflict" >> $GITHUB_OUTPUT
             echo "Merge conflicts detected, skipping push"
+            echo "changes<<EOF" >> $GITHUB_OUTPUT
+            echo "$CHANGES_FORMATTED" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
           fi
 
       - name: Notify via Telegram (success)
@@ -75,15 +85,14 @@ jobs:
           BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHAT_ID: 6629257152
         run: |
-          CHANGES="${{ steps.check.outputs.changes }}"
+          CHANGES="${{ steps.merge.outputs.changes }}"
           NEW_VER="${{ steps.merge.outputs.new_version }}"
-          MESSAGE="✅ Claude Plugins 上游同步完成！
+          MESSAGE="✅ Upstream sync 成功
 
-📝 变更：
-${CHANGES}
+版本: ${NEW_VER}
 
-🏷️ Telegram 插件已升级到 v${NEW_VER}
-🚀 已直接合并到 main 分支"
+变更日志:
+${CHANGES}"
 
           curl -s "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
             -d "chat_id=${CHAT_ID}" \
@@ -95,14 +104,14 @@ ${CHANGES}
           BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHAT_ID: 6629257152
         run: |
-          CHANGES="${{ steps.check.outputs.changes }}"
-          MESSAGE="⚠️ Claude Plugins 上游同步失败：有合并冲突！
+          CHANGES="${{ steps.merge.outputs.changes }}"
+          MESSAGE="⚠️ Upstream sync 失败：有合并冲突！
 
-📝 上游变更：
+上游变更日志:
 ${CHANGES}
 
-🔧 需要手动处理冲突后推送到 main 分支
-📂 仓库：https://github.com/${{ github.repository }}"
+需要手动处理冲突后推送到 main 分支
+仓库：https://github.com/${{ github.repository }}"
 
           curl -s "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
             -d "chat_id=${CHAT_ID}" \
