@@ -56,21 +56,7 @@ jobs:
             echo "Merge succeeded cleanly"
 
             # Bump telegram plugin patch version
-            cat > /tmp/bump_version.py << 'PYEOF'
-import json, pathlib
-pkg_path = pathlib.Path('external_plugins/telegram/package.json')
-plugin_path = pathlib.Path('external_plugins/telegram/.claude-plugin/plugin.json')
-pkg = json.loads(pkg_path.read_text())
-parts = pkg['version'].split('.')
-parts[2] = str(int(parts[2]) + 1)
-new_ver = '.'.join(parts)
-pkg['version'] = new_ver
-pkg_path.write_text(json.dumps(pkg, indent=2) + '\n')
-plugin = json.loads(plugin_path.read_text())
-plugin['version'] = new_ver
-plugin_path.write_text(json.dumps(plugin, indent=2) + '\n')
-print(f'Bumped version to {new_ver}')
-PYEOF
+            echo 'aW1wb3J0IGpzb24sIHBhdGhsaWIKcGtnX3BhdGggPSBwYXRobGliLlBhdGgoJ2V4dGVybmFsX3BsdWdpbnMvdGVsZWdyYW0vcGFja2FnZS5qc29uJykKcGx1Z2luX3BhdGggPSBwYXRobGliLlBhdGgoJ2V4dGVybmFsX3BsdWdpbnMvdGVsZWdyYW0vLmNsYXVkZS1wbHVnaW4vcGx1Z2luLmpzb24nKQpwa2cgPSBqc29uLmxvYWRzKHBrZ19wYXRoLnJlYWRfdGV4dCgpKQpwYXJ0cyA9IHBrZ1sndmVyc2lvbiddLnNwbGl0KCcuJykKcGFydHNbMl0gPSBzdHIoaW50KHBhcnRzWzJdKSArIDEpCm5ld192ZXIgPSAnLicuam9pbihwYXJ0cykKcGtnWyd2ZXJzaW9uJ10gPSBuZXdfdmVyCnBrZ19wYXRoLndyaXRlX3RleHQoanNvbi5kdW1wcyhwa2csIGluZGVudD0yKSArICdcbicpCnBsdWdpbiA9IGpzb24ubG9hZHMocGx1Z2luX3BhdGgucmVhZF90ZXh0KCkpCnBsdWdpblsndmVyc2lvbiddID0gbmV3X3ZlcgpwbHVnaW5fcGF0aC53cml0ZV90ZXh0KGpzb24uZHVtcHMocGx1Z2luLCBpbmRlbnQ9MikgKyAnXG4nKQpwcmludChmJ0J1bXBlZCB2ZXJzaW9uIHRvIHtuZXdfdmVyfScpCg==' | base64 -d > /tmp/bump_version.py
             python3 /tmp/bump_version.py
             NEW_VER=$(python3 -c "import json; print(json.load(open('external_plugins/telegram/package.json'))['version'])")
             git add external_plugins/telegram/package.json external_plugins/telegram/.claude-plugin/plugin.json
