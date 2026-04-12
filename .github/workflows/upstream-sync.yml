@@ -1,7 +1,7 @@
 name: Sync upstream
 on:
   schedule:
-    - cron: '0 4 * * *'  # 每天北京时间 12:00 检查一次
+    - cron: '50 19 * * *'  # 每天北京时间 03:50，在本地 04:00 维护前 10 分钟同步
   workflow_dispatch:  # 支持手动触发
 
 jobs:
