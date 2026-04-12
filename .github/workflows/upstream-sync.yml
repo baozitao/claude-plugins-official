@@ -53,12 +53,9 @@ jobs:
             # 每行加上 "- " 前缀
             CHANGES_FORMATTED=$(echo "$CHANGES_RAW" | sed 's/^/- /')
 
-            # Bump telegram plugin patch version
-            echo 'aW1wb3J0IGpzb24sIHBhdGhsaWIKcGtnX3BhdGggPSBwYXRobGliLlBhdGgoJ2V4dGVybmFsX3BsdWdpbnMvdGVsZWdyYW0vcGFja2FnZS5qc29uJykKcGx1Z2luX3BhdGggPSBwYXRobGliLlBhdGgoJ2V4dGVybmFsX3BsdWdpbnMvdGVsZWdyYW0vLmNsYXVkZS1wbHVnaW4vcGx1Z2luLmpzb24nKQpwa2cgPSBqc29uLmxvYWRzKHBrZ19wYXRoLnJlYWRfdGV4dCgpKQpwYXJ0cyA9IHBrZ1sndmVyc2lvbiddLnNwbGl0KCcuJykKcGFydHNbMl0gPSBzdHIoaW50KHBhcnRzWzJdKSArIDEpCm5ld192ZXIgPSAnLicuam9pbihwYXJ0cykKcGtnWyd2ZXJzaW9uJ10gPSBuZXdfdmVyCnBrZ19wYXRoLndyaXRlX3RleHQoanNvbi5kdW1wcyhwa2csIGluZGVudD0yKSArICdcbicpCnBsdWdpbiA9IGpzb24ubG9hZHMocGx1Z2luX3BhdGgucmVhZF90ZXh0KCkpCnBsdWdpblsndmVyc2lvbiddID0gbmV3X3ZlcgpwbHVnaW5fcGF0aC53cml0ZV90ZXh0KGpzb24uZHVtcHMocGx1Z2luLCBpbmRlbnQ9MikgKyAnXG4nKQpwcmludChmJ0J1bXBlZCB2ZXJzaW9uIHRvIHtuZXdfdmVyfScpCg==' | base64 -d > /tmp/bump_version.py
-            python3 /tmp/bump_version.py
-            NEW_VER=$(python3 -c "import json; print(json.load(open('external_plugins/telegram/package.json'))['version'])")
-            git add external_plugins/telegram/package.json external_plugins/telegram/.claude-plugin/plugin.json
-            git commit -m "chore: bump telegram plugin version to ${NEW_VER}"
+
+            # Read version from upstream (no longer bumped, stays in sync with anthropics)
+            NEW_VER=$(python3 -c "import json; print(json.load(open('external_plugins/telegram/.claude-plugin/plugin.json'))['version'])")
 
             # 直接推送到 main
             git push origin main
